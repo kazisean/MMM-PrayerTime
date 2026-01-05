@@ -12,3 +12,31 @@
 .MMM-PrayerTime .occasion-time {
   text-align: center;
 }
+
+.MMM-PrayerTime .prayer-countdown-container {
+  text-align: center;
+  margin-top: 10px;
+  padding-top: 5px;
+  border-top: 1px solid #666;
+}
+
+.MMM-PrayerTime .prayer-countdown-label {
+  margin-bottom: 5px;
+  font-size: 12px;
+}
+
+.MMM-PrayerTime .prayer-countdown {
+  font-size: 18px;
+  font-weight: bold;
+  font-family: monospace;
+  letter-spacing: 2px;
+}
+
+.MMM-PrayerTime .prayer-countdown.blink-colon .colon {
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}

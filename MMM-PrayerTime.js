@@ -1,30 +1,31 @@
 Module.register("MMM-PrayerTime",{
 	// Default module config.
 	defaults: {
-    apiVersion: '1.0',
-    lat: false,
-    lon: false,
-    timezone: false,
-    timeFormat: config.timeFormat || 24,
-    method: 5, // method of timing computation {0-Shia Ithna-Ashari,1-University of Islamic Sciences, Karachi,2-Islamic Society of North America (ISNA),3-Muslim World League (MWL),4-Umm al-Qura, Makkah,5-Egyptian General Authority of Survey,7-Institute of Geophysics, University of Tehran}
-    methodSettings: false,
-    school: 0, // 0 = Shafii, 1 = Hanafi
-    adjustment: 0, // 0 = no days of adjustment to hijri date(s)
-    tune: '', // Comma Separated String of integers to offset timings returned by the API in minutes. Example: 5,3,5,7,9,7. See https://aladhan.com/calculation-methods
-    midnightMode: 0, // 0 for Standard (Mid Sunset to Sunrise), 1 for Jafari (Mid Sunset to Fajr). If you leave this empty, it defaults to Standard.
-    latitudeAdjustmentMethod: '', // Method for adjusting times higher latitudes - for instance, if you are checking timings in the UK or Sweden. 1 - Middle of the Night, 2 - One Seventh, 3 - Angle Based
-    playAdzan: ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'],
-    notDisplayed: ['midnight', 'sunset'],
-    useUpdateInterval: true,
-    updateInterval: 86400 * 1000, // How often do you want to fetch new praying time? (milliseconds)
-    animationSpeed: 2.5 * 1000, // Speed of the update animation. (milliseconds)
-    language: config.language || "en",
-    colored: false,
-    showAdzanAlert: true,
-    showTomorrow: true,
-    vertical: true, // set false to horizontal view
-    alertTimer: 15000,
+	   apiVersion: '1.0',
+	   lat: false,
+	   lon: false,
+	   timezone: false,
+	   timeFormat: config.timeFormat || 24,
+	   method: 5, // method of timing computation {0-Shia Ithna-Ashari,1-University of Islamic Sciences, Karachi,2-Islamic Society of North America (ISNA),3-Muslim World League (MWL),4-Umm al-Qura, Makkah,5-Egyptian General Authority of Survey,7-Institute of Geophysics, University of Tehran}
+	   methodSettings: false,
+	   school: 0, // 0 = Shafii, 1 = Hanafi
+	   adjustment: 0, // 0 = no days of adjustment to hijri date(s)
+	   tune: '', // Comma Separated String of integers to offset timings returned by the API in minutes. Example: 5,3,5,7,9,7. See https://aladhan.com/calculation-methods
+	   midnightMode: 0, // 0 for Standard (Mid Sunset to Sunrise), 1 for Jafari (Mid Sunset to Fajr). If you leave this empty, it defaults to Standard.
+	   latitudeAdjustmentMethod: '', // Method for adjusting times higher latitudes - for instance, if you are checking timings in the UK or Sweden. 1 - Middle of the Night, 2 - One Seventh, 3 - Angle Based
+	   playAdzan: ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'],
+	   notDisplayed: ['midnight', 'sunset'],
+	   useUpdateInterval: true,
+	   updateInterval: 86400 * 1000, // How often do you want to fetch new praying time? (milliseconds)
+	   animationSpeed: 2.5 * 1000, // Speed of the update animation. (milliseconds)
+	   language: config.language || "en",
+	   colored: false,
+	   showAdzanAlert: true,
+	   showTomorrow: true,
+	   vertical: true, // set false to horizontal view
+	   alertTimer: 15000,
 	telegramAlert: [ false ], // [ Status, [["chat_id_1", "chat_id_2", ...], 'bot_token'] ]
+	   showCountdown: false, // show countdown to next prayer time
 	},
 
 	getScripts: function() {
@@ -246,32 +247,115 @@ Module.register("MMM-PrayerTime",{
 		Log.info("Starting module: " + this.name);
 		var self = this;
 
-    // Set locale.
+	   // Set locale.
 		moment.locale(this.config.language);
 
-    this.todaySchedule = {};
-    this.nextdaySchedule = {};
-    this.arrTodaySchedule = [];
-    this.arrNextdaySchedule = [];
-    this.arrAdzanTime = [];
+	   this.todaySchedule = {};
+	   this.nextdaySchedule = {};
+	   this.arrTodaySchedule = [];
+	   this.arrNextdaySchedule = [];
+	   this.arrAdzanTime = [];
+	   this.countdownInterval = null;
 
-    this.loaded = false;
-    var self = this;
+	   this.loaded = false;
+	   var self = this;
 
-    // first update
-    self.updateSchedule(0);
-    // periodic update if defined
-    if (self.config.useUpdateInterval) {
-      Log.log(self.name + ': using periodic update is activated');
-      setInterval(function() {
-        self.updateSchedule(0);
-      }, self.config.updateInterval);
-    }
-    // adzan-checker
-    self.isAdzanNow();
-    setInterval(function() {
-      self.isAdzanNow();
-    }, 1000);
+	   // first update
+	   self.updateSchedule(0);
+	   // periodic update if defined
+	   if (self.config.useUpdateInterval) {
+	     Log.log(self.name + ': using periodic update is activated');
+	     setInterval(function() {
+	       self.updateSchedule(0);
+	     }, self.config.updateInterval);
+	   }
+	   // adzan-checker
+	   self.isAdzanNow();
+	   setInterval(function() {
+	     self.isAdzanNow();
+	   }, 1000);
+
+	   // countdown timer
+	   if (self.config.showCountdown) {
+	     self.updateCountdown();
+	     setInterval(function() {
+	       self.updateCountdown();
+	     }, 1000);
+	   }
+	},
+
+	/* getNextPrayerTime
+	 * Finds the next prayer time and returns the time difference
+	 */
+	getNextPrayerTime: function() {
+		if (!this.loaded || this.arrTodaySchedule.length === 0) {
+			return null;
+		}
+
+		var now = moment();
+		var nextPrayer = null;
+		var minDiff = null;
+
+		// Check today's prayers
+		for (var i = 0; i < this.arrTodaySchedule.length; i++) {
+			var prayerTime = moment(this.arrTodaySchedule[i][1], "HH:mm");
+			if (prayerTime.isAfter(now)) {
+				var diff = prayerTime.diff(now);
+				if (minDiff === null || diff < minDiff) {
+					minDiff = diff;
+					nextPrayer = {
+						name: this.arrTodaySchedule[i][0],
+						time: prayerTime,
+						diff: diff
+					};
+				}
+			}
+		}
+
+		// If no more prayers today, check tomorrow's first prayer
+		if (!nextPrayer && this.arrNextdaySchedule.length > 0) {
+			var tomorrowPrayer = moment(this.arrNextdaySchedule[0][1], "HH:mm").add(1, 'day');
+			nextPrayer = {
+				name: this.arrNextdaySchedule[0][0],
+				time: tomorrowPrayer,
+				diff: tomorrowPrayer.diff(now)
+			};
+		}
+
+		return nextPrayer;
+	},
+
+	/* updateCountdown
+	 * Updates the countdown display
+	 */
+	updateCountdown: function() {
+		if (!this.config.showCountdown) return;
+
+		var nextPrayer = this.getNextPrayerTime();
+		var countdownElement = document.getElementById("prayer-countdown-" + this.identifier);
+		var countdownLabel = document.getElementById("prayer-countdown-label-" + this.identifier);
+		
+		if (nextPrayer && countdownElement && countdownLabel) {
+			var duration = moment.duration(nextPrayer.diff);
+			var hours = Math.floor(duration.asHours());
+			var minutes = duration.minutes();
+			var seconds = duration.seconds();
+
+			// Create HTML with blinking colons
+			var timeHTML =
+				(hours < 10 ? "0" + hours : hours) +
+				'<span class="colon">:</span>' +
+				(minutes < 10 ? "0" + minutes : minutes) +
+				'<span class="colon">:</span>' +
+				(seconds < 10 ? "0" + seconds : seconds);
+
+			countdownElement.innerHTML = timeHTML;
+			countdownElement.classList.add("blink-colon");
+			
+			// Update label with prayer name
+			var prayerName = this.translate(nextPrayer.name.toUpperCase());
+			countdownLabel.innerHTML = this.translate("NEXT_PRAYER") + ": " + prayerName;
+		}
 	},
 
 	// Override dom generator.
@@ -412,8 +496,28 @@ Module.register("MMM-PrayerTime",{
       wrapper.appendChild(table);
     }
 
+		// Add countdown display if enabled
+		if (this.config.showCountdown) {
+			var countdownContainer = document.createElement("div");
+			countdownContainer.className = "prayer-countdown-container";
+			
+			var countdownLabel = document.createElement("div");
+			countdownLabel.className = "prayer-countdown-label small dimmed";
+			countdownLabel.id = "prayer-countdown-label-" + this.identifier;
+			countdownLabel.innerHTML = this.translate("NEXT_PRAYER");
+			
+			var countdownDisplay = document.createElement("div");
+			countdownDisplay.className = "prayer-countdown";
+			countdownDisplay.id = "prayer-countdown-" + this.identifier;
+			countdownDisplay.innerHTML = "--:--:--";
+			
+			countdownContainer.appendChild(countdownLabel);
+			countdownContainer.appendChild(countdownDisplay);
+			wrapper.appendChild(countdownContainer);
+		}
+
 		return wrapper;
-  },
+		},
 
 	notificationReceived: function(notification, payload, sender) {
 		Log.log(this.name + ": received notification : " + notification);

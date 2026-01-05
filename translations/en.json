@@ -15,6 +15,7 @@
 
 	"TODAY": "Today",
 	"TOMORROW": "Tomorrow",
+	"NEXT_PRAYER": "Next Prayer",
 
 	"TXT_PRAYERTIME": "PRAYER TIME",
 	"TXT_PRAYERTIME_DESC": "display prayer time for today and tomorrow"
